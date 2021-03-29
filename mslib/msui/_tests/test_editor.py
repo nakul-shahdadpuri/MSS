@@ -27,6 +27,7 @@
 
 import mock
 import os
+import fs
 import sys
 from PyQt5 import QtWidgets
 from mslib.msui import editor
@@ -34,10 +35,11 @@ from mslib._tests.constants import ROOT_DIR
 
 
 class Test_Editor(object):
-    sample_file = os.path.join(os.path.dirname(__file__), "..", "..", "..", "docs",
-                               "samples", "config", "mss", "mss_settings.json.sample")
+    sample_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "docs",
+                                  "samples", "config", "mss", "mss_settings.json.sample"))
+    sample_file = sample_file.replace('\\', '/')
 
-    save_file_name = os.path.join(ROOT_DIR, "testeditor_save.json")
+    save_file_name = fs.path.join(ROOT_DIR, "testeditor_save.json")
 
     @mock.patch("PyQt5.QtWidgets.QMessageBox.warning", return_value=QtWidgets.QMessageBox.Yes)
     def setup(self, mockmessage):
@@ -58,18 +60,21 @@ class Test_Editor(object):
     @mock.patch("mslib.msui.editor.get_open_filename", return_value=sample_file)
     def test_file_open(self, mockfile):
         self.window.file_open()
-        assert self.window.path == self.sample_file
         assert "location" in self.window.file_content
 
     @mock.patch("mslib.msui.editor.get_open_filename", return_value=sample_file)
-    def test_file_save(self, mockfile):
+    def test_file_save_and_quit(self, mockfile):
         self.window.file_open()
         self.window.path = self.save_file_name
-        self.window.file_save()
+        self.window.editor.setPlainText(self.window.editor.toPlainText() + " ")
+        self.window.file_save_and_quit()
         assert os.path.exists(self.save_file_name)
 
+    @mock.patch("mslib.msui.editor.get_open_filename", return_value=sample_file)
     @mock.patch("mslib.msui.editor.get_save_filename", return_value=save_file_name)
-    def test_file_saveas(self, mocksaveas):
+    def test_file_saveas(self, mocksaveas, mockfile):
+        self.window.file_open()
         self.window.path = None
+        self.window.editor.setPlainText(self.window.editor.toPlainText() + " ")
         self.window.file_saveas()
         assert os.path.exists(self.save_file_name)

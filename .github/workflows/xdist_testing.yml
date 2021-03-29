@@ -5,7 +5,7 @@ env:
   PAT: ${{ secrets.PAT }}
 
 jobs:
-  Test-MSS:
+  xdist_testing:
     runs-on: ubuntu-latest
     
     defaults:
@@ -17,10 +17,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-
+        
     - name: Reinstall dependencies if changed
       run: |
-        cmp -s /meta.yaml localbuild/meta.yaml && cmp -s /development.txt requirements.d/development.txt || (echo Dependencies differ \
+        cmp -s /meta.yaml localbuild/meta.yaml && cmp -s /development.txt requirements.d/development.txt|| (echo Dependencies differ \
         && cat localbuild/meta.yaml \
         | sed -n '/^requirements:/,/^test:/p' \
         | sed -e "s/.*- //" \
@@ -34,24 +34,9 @@ jobs:
         && mamba install --file reqs.txt \
         && mamba install --file requirements.d/development.txt)
 
-    - name: Run tests
+    - name: Run selected tests
       timeout-minutes: 25
       run: |
         source /opt/conda/bin/activate mssenv \
         && cd $GITHUB_WORKSPACE \
-        && pytest mslib
-
-  Update-Images:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-    needs: [Test-MSS]
-    
-    steps:
-      - if: env.PAT != ''
-        name: Invoke dockerhub image creation
-        uses: benc-uk/workflow-dispatch@827565b908f387ffd483c84312273ae185c06c8a
-        with:
-          workflow: Update all images
-          repo: Open-MSS/dockerhub
-          ref: stable
-          token: ${{ secrets.PAT }}
+        && pytest -n 6 --dist loadscope --max-worker-restart 0 mslib
