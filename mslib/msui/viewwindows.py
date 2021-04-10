@@ -11,7 +11,7 @@
 
     :copyright: Copyright 2008-2014 Deutsches Zentrum fuer Luft- und Raumfahrt e.V.
     :copyright: Copyright 2011-2014 Marc Rautenhaus (mr)
-    :copyright: Copyright 2016-2020 by the mss team, see AUTHORS.
+    :copyright: Copyright 2016-2021 by the mss team, see AUTHORS.
     :license: APACHE-2.0, see LICENSE for details.
 
     Licensed under the Apache License, Version 2.0 (the "License");
@@ -59,6 +59,8 @@ class MSSViewWindow(QtWidgets.QMainWindow):
         self._id = _id
         # Used to force close window without the dialog popping up
         self.force_close = False
+        # Flag variable to check whether tableview window exists or not.
+        self.tv_window_exists = True
 
     def handle_force_close(self):
         self.force_close = True
@@ -85,9 +87,18 @@ class MSSViewWindow(QtWidgets.QMainWindow):
             if self._id is not None:
                 self.viewClosesId.emit(self._id)
             logging.debug(self._id)
+            # sets flag as False which shows tableview window had been closed.
+            self.tv_window_exists = False
             event.accept()
         else:
             event.ignore()
+
+    def exists(self):
+        """Returns the flag False if self.closeEvent() is triggered else returns True.
+           This is only for helping as a flag information in
+           force closing of tableview when main window closes.
+        """
+        return self.tv_window_exists
 
     def setFlightTrackModel(self, model):
         """Set the QAbstractItemModel instance that the view displays.

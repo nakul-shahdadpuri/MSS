@@ -13,7 +13,7 @@
 
     :copyright: Copyright 2008-2014 Deutsches Zentrum fuer Luft- und Raumfahrt e.V.
     :copyright: Copyright 2011-2014 Marc Rautenhaus (mr)
-    :copyright: Copyright 2016-2020 by the mss team, see AUTHORS.
+    :copyright: Copyright 2016-2021 by the mss team, see AUTHORS.
     :license: APACHE-2.0, see LICENSE for details.
 
     Licensed under the Apache License, Version 2.0 (the "License");
@@ -129,7 +129,7 @@ class VS_GenericStyle(AbstractVerticalSectionStyle):
 
     def _plot_style(self):
         ax = self.ax
-        curtain_cc = self.data[self.dataname] * self.unit_scale
+        curtain_cc = self.data[self.dataname]
         curtain_cc = np.ma.masked_invalid(curtain_cc)
         curtain_p = self.data["air_pressure"]
 
@@ -205,11 +205,11 @@ def make_generic_class(name, entity, vert, add_data=None, add_contours=None,
     class fnord(VS_GenericStyle):
         name = f"VS_{entity}_{vert}"
         dataname = entity
-        units, unit_scale = Targets.get_unit(dataname)
+        units, _ = Targets.get_unit(dataname)
         title = Targets.TITLES.get(entity, entity)
         if units:
             title += f" ({units})"
-        required_datafields = [(vert, entity, None)] + add_data
+        required_datafields = [(vert, entity, units)] + add_data
         contours = add_contours
 
     fnord.__name__ = name

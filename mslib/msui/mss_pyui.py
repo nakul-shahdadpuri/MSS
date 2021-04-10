@@ -13,7 +13,7 @@
 
     :copyright: Copyright 2008-2014 Deutsches Zentrum fuer Luft- und Raumfahrt e.V.
     :copyright: Copyright 2011-2014 Marc Rautenhaus (mr)
-    :copyright: Copyright 2016-2020 by the mss team, see AUTHORS.
+    :copyright: Copyright 2016-2021 by the mss team, see AUTHORS.
     :license: APACHE-2.0, see LICENSE for details.
 
     Licensed under the Apache License, Version 2.0 (the "License");
@@ -141,7 +141,9 @@ class MSS_AboutDialog(QtWidgets.QDialog, ui_ab.Ui_AboutMSUIDialog):
         """
         super(MSS_AboutDialog, self).__init__(parent)
         self.setupUi(self)
-        self.lblVersion.setText(f"Version: {__version__}")
+        self.lblVersion.setText("Version: {}".format(__version__))
+        self.lblChanges.setText(f'<a href="https://github.com/Open-MSS/MSS/issues?q=is%3Aclosed+milestone%3A"\
+            "{__version__[:-1]}">New Features and Changes</a>')
         blub = QtGui.QPixmap(python_powered())
         self.lblPython.setPixmap(blub)
 
@@ -216,6 +218,8 @@ class MSSMainWindow(QtWidgets.QMainWindow, ui.Ui_MSSMainWindow):
 
         # Status Bar
         self.labelStatusbar.setText(self.status())
+        # Instantiates object of MSS Tableview window helping in force close it.
+        self.tv_window = None
 
     @staticmethod
     def preload_wms(urls):
@@ -414,6 +418,11 @@ class MSSMainWindow(QtWidgets.QMainWindow, ui.Ui_MSSMainWindow):
                 self.mscolab_window.close()
             if self.config_editor is not None:
                 self.config_editor.close()
+            # tv = tableview ; it is an object of MSS Tableview window. Used for force closing it.
+            if self.tv_window is not None:
+                if self.tv_window.exists():  # checks whether or not tableview window has closed before
+                    self.tv_window.handle_force_close()     # enters condition when tableview window is not closed.
+                    self.tv_window = None
             event.accept()
         else:
             event.ignore()
@@ -441,6 +450,7 @@ class MSSMainWindow(QtWidgets.QMainWindow, ui.Ui_MSSMainWindow):
             # Table view.
             view_window = tableview.MSSTableViewWindow(model=self.active_flight_track)
             view_window.centralwidget.resize(layout['tableview'][0], layout['tableview'][1])
+            self.tv_window = view_window
         if view_window is not None:
             # Make sure view window will be deleted after being closed, not
             # just hidden (cf. Chapter 5 in PyQt4).

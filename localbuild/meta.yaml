@@ -39,14 +39,14 @@ requirements:
     - hdf4
     - pillow
     - pytz
-    - pyqt >=5,<6
+    - pyqt >=5, <6
     - pygeoif
-    - qt >=5,<6
+    - qt >=5, <6
     - requests
     - scipy
     - skyfield >=1.12
     - tk
-    - owslib
+    - owslib <=0.21
     - unicodecsv
     - fs_filepicker
     - cftime >=1.0.1
@@ -72,8 +72,8 @@ requirements:
     - xstatic-bootstrap
     - pyperclip
     - geos <3.9.0
-    - sqlalchemy < 1.4.0
-    - sqlite < 3.35.1
+    - sqlalchemy <1.4.0
+    - sqlite <3.35.1
 
 test:
   imports:

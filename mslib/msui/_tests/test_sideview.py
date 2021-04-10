@@ -9,7 +9,7 @@
     This file is part of mss.
 
     :copyright: Copyright 2017 Joern Ungermann
-    :copyright: Copyright 2017-2020 by the mss team, see AUTHORS.
+    :copyright: Copyright 2017-2021 by the mss team, see AUTHORS.
     :license: APACHE-2.0, see LICENSE for details.
 
     Licensed under the Apache License, Version 2.0 (the "License");
@@ -170,7 +170,8 @@ class Test_SideViewWMS(object):
         QtWidgets.QApplication.processEvents()
         QtTest.QTest.mouseClick(self.wms_control.multilayers.btGetCapabilities, QtCore.Qt.LeftButton)
         QtWidgets.QApplication.processEvents()
-        QtTest.QTest.qWait(2000)
+        while self.wms_control.cpdlg.isVisible():
+            QtTest.QTest.qWait(100)
 
     @mock.patch("PyQt5.QtWidgets.QMessageBox")
     def test_server_getmap(self, mockbox):

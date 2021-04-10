@@ -10,7 +10,7 @@
 
     :copyright: Copyright 2008-2014 Deutsches Zentrum fuer Luft- und Raumfahrt e.V.
     :copyright: Copyright 2017 Joern Ungermann
-    :copyright: Copyright 2016-2020 by the mss team, see AUTHORS.
+    :copyright: Copyright 2016-2021 by the mss team, see AUTHORS.
     :license: APACHE-2.0, see LICENSE for details.
 
     Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,6 +45,11 @@ def callback_ok_image(status, response_headers):
 def callback_ok_xml(status, response_headers):
     assert status == "200 OK"
     assert response_headers[0] == ('Content-type', 'text/xml')
+
+
+def callback_ok_html(status, response_headers):
+    assert status == "200 OK"
+    assert response_headers[0] == ('Content-Type', 'text/html; charset=utf-8')
 
 
 def callback_404_plain(status, response_headers):

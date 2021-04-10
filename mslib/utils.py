@@ -10,7 +10,7 @@
 
     :copyright: Copyright 2008-2014 Deutsches Zentrum fuer Luft- und Raumfahrt e.V.
     :copyright: Copyright 2011-2014 Marc Rautenhaus (mr)
-    :copyright: Copyright 2016-2020 by the mss team, see AUTHORS.
+    :copyright: Copyright 2016-2021 by the mss team, see AUTHORS.
     :license: APACHE-2.0, see LICENSE for details.
 
     Licensed under the Apache License, Version 2.0 (the "License");
@@ -53,6 +53,32 @@ UR.define("degrees_north = degrees")
 UR.define("degrees_south = -degrees")
 UR.define("degrees_east = degrees")
 UR.define("degrees_west = -degrees")
+
+UR.define("degrees_N = degrees")
+UR.define("degrees_S = -degrees")
+UR.define("degrees_E = degrees")
+UR.define("degrees_W = -degrees")
+
+UR.define("degreesN = degrees")
+UR.define("degreesS = -degrees")
+UR.define("degreesE = degrees")
+UR.define("degreesW = -degrees")
+
+UR.define("degree_north = degrees")
+UR.define("degree_south = -degrees")
+UR.define("degree_east = degrees")
+UR.define("degree_west = -degrees")
+
+UR.define("degree_N = degrees")
+UR.define("degree_S = -degrees")
+UR.define("degree_E = degrees")
+UR.define("degree_W = -degrees")
+
+UR.define("degreeN = degrees")
+UR.define("degreeS = -degrees")
+UR.define("degreeE = degrees")
+UR.define("degreeW = -degrees")
+
 UR.define("sigma = dimensionless")
 UR.define("fraction = [] = frac")
 UR.define("percent = 1e-2 fraction")
@@ -587,7 +613,7 @@ def setup_logging(args):
     for ch in logger.handlers:
         logger.removeHandler(ch)
 
-    debug_formatter = logging.Formatter("%(asctime)s (%(module)s.%(funcName)s:%(lineno)s): %(message)s")
+    debug_formatter = logging.Formatter("%(asctime)s (%(module)s.%(funcName)s:%(lineno)s): %(levelname)s: %(message)s")
     default_formatter = logging.Formatter("%(levelname)s: %(message)s")
 
     # Console handler (suppress DEBUG by default)
@@ -693,3 +719,52 @@ def dropEvent(self, event):
 
 def dragEnterEvent(self, event):
     event.accept()
+
+
+class Worker(QtCore.QThread):
+    """
+    Can be used to run a function through a QThread without much struggle,
+    and receive the return value or exception through signals.
+    Beware not to modify the parents connections through the function.
+    You may change the GUI but it may sometimes not update until the Worker is done.
+    """
+    finished = QtCore.pyqtSignal(object)
+    failed = QtCore.pyqtSignal(Exception)
+
+    def __init__(self, function):
+        super(Worker, self).__init__()
+        self.function = function
+        self.failed.connect(lambda e: self._update_gui())
+        self.finished.connect(lambda x: self._update_gui())
+
+    def run(self):
+        try:
+            result = self.function()
+            self.finished.emit(result)
+        except Exception as e:
+            self.failed.emit(e)
+
+    @staticmethod
+    def create(function, on_success=None, on_failure=None, start=True):
+        """
+        Create, connect and directly execute a Worker in a single line.
+        Inspired by QThread.create only available in C++17.
+        """
+        worker = Worker(function)
+        if on_success:
+            worker.finished.connect(on_success)
+        if on_failure:
+            worker.failed.connect(on_failure)
+        if start:
+            worker.start()
+        return worker
+
+    @staticmethod
+    def _update_gui():
+        """
+        Iterate through all windows and update them.
+        Useful for when a thread modifies the GUI.
+        Happens automatically at the end of a Worker.
+        """
+        for window in QtWidgets.QApplication.allWindows():
+            window.requestUpdate()

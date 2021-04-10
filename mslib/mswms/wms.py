@@ -25,7 +25,7 @@
     :copyright: Copyright 2008-2014 Deutsches Zentrum fuer Luft- und Raumfahrt e.V.
     :copyright: Copyright 2011-2014 Marc Rautenhaus (mr), Omar Qunsul (oq)
     :copyright: Copyright 2016-2017 Reimar Bauer
-    :copyright: Copyright 2016-2020 by the mss team, see AUTHORS.
+    :copyright: Copyright 2016-2021 by the mss team, see AUTHORS.
     :license: APACHE-2.0, see LICENSE for details.
 
     Licensed under the Apache License, Version 2.0 (the "License");
@@ -54,7 +54,7 @@ from chameleon import PageTemplateLoader
 from owslib.crs import axisorder_yx
 from PIL import Image
 
-from flask import request, make_response, redirect
+from flask import request, make_response, render_template
 from flask_httpauth import HTTPBasicAuth
 from multidict import CIMultiDict
 from mslib.utils import conditional_decorator
@@ -591,6 +591,6 @@ def application():
         return res
 
     except Exception as ex:
-        error_message = f"{type(ex)}: {ex}\n"
-        logging.error("Unexpected error: %s", error_message)
-        return redirect('/index', 307)
+        logging.error("Unexpected error: %s: %s\nTraceback:\n%s",
+                      type(ex), ex, traceback.format_exc())
+        return render_template("/index.html")
