@@ -91,7 +91,7 @@ if mscolab_settings.__dict__.get('enable_basic_http_authentication', False):
 
 def initialize_managers(app):
     sockio, cm, fm = setup_managers(app)
-    # initiatializing socketio and db
+    # initializing socketio and db
     app.wsgi_app = socketio.Middleware(socketio.server, app.wsgi_app)
     sockio.init_app(app)
     db.init_app(app)
@@ -436,7 +436,7 @@ def modify_bulk_permissions():
     success = fm.modify_bulk_permission(p_id, user, u_ids, new_access_level)
     if success:
         for u_id in u_ids:
-            sockio.sm.emit_new_permission(u_id=u_id, p_id=p_id)
+            sockio.sm.emit_update_permission(u_id, p_id, access_level=new_access_level)
         sockio.sm.emit_project_permissions_updated(user.id, p_id)
         return jsonify({"success": True, "message": "User permissions successfully updated!"})
 

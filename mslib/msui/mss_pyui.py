@@ -346,6 +346,7 @@ class MSSMainWindow(QtWidgets.QMainWindow, ui.Ui_MSSMainWindow):
                 self, "Import Flight Track", self.last_save_directory,
                 "All Files (*." + extension + ")", pickertype=pickertype)
             if filename is not None:
+                self.last_save_directory = fs.path.dirname(filename)
                 try:
                     ft_name, new_waypoints = function(filename)
                 # wildcard exception to be resilient against error introduced by user code
@@ -384,6 +385,7 @@ class MSSMainWindow(QtWidgets.QMainWindow, ui.Ui_MSSMainWindow):
                 self, "Export Flight Track", default_filename,
                 name + " (*." + extension + ")", pickertype=pickertype)
             if filename is not None:
+                self.last_save_directory = fs.path.dirname(filename)
                 try:
                     function(filename, self.active_flight_track.name, self.active_flight_track.waypoints)
                 # wildcard exception to be resilient against error introduced by user code
@@ -411,6 +413,8 @@ class MSSMainWindow(QtWidgets.QMainWindow, ui.Ui_MSSMainWindow):
         if ret == QtWidgets.QMessageBox.Yes:
             # Table View stick around after MainWindow closes - maybe some dangling reference?
             # This removes them for sure!
+            for i in range(self.listViews.count()):
+                self.listViews.item(i).window.handle_force_close()
             self.listViews.clear()
             self.listFlightTracks.clear()
             # cleanup mscolab window
@@ -532,6 +536,8 @@ class MSSMainWindow(QtWidgets.QMainWindow, ui.Ui_MSSMainWindow):
         self.activate_flight_track(listitem)
 
     def restart_application(self):
+        for i in range(self.listViews.count()):
+            self.listViews.item(i).window.handle_force_close()
         self.listViews.clear()
         self.remove_plugins()
         self.add_plugins()
@@ -575,6 +581,7 @@ class MSSMainWindow(QtWidgets.QMainWindow, ui.Ui_MSSMainWindow):
             self, "Open Flight Track", self.last_save_directory, "Flight Track Files (*.ftml)",
             pickertag="filepicker_default")
         if filename is not None:
+            self.last_save_directory = fs.path.dirname(filename)
             try:
                 if filename.endswith('.ftml'):
                     self.create_new_flight_track(filename=filename)

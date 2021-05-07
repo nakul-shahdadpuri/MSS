@@ -222,7 +222,6 @@ class MSSWebMapService(mslib.ogcwms.WebMapService):
 
     def get_redirect_url(self, method="Get"):
         # return self.getOperationByName("GetMap").methods[method]["url"]
-        # ToDo redirect broken
         return self.getOperationByName("GetMap").methods[0]["url"]
 
 
@@ -390,6 +389,7 @@ class WMSControlWidget(QtWidgets.QWidget, ui.Ui_WMSDockWidget):
     fetch = QtCore.pyqtSignal([list], name="fetch")
     signal_disable_cbs = QtCore.Signal(name="disable_cbs")
     signal_enable_cbs = QtCore.Signal(name="enable_cbs")
+    image_displayed = QtCore.pyqtSignal()
 
     def __init__(self, parent=None, default_WMS=None, wms_cache=None, view=None):
         """
@@ -606,27 +606,35 @@ class WMSControlWidget(QtWidgets.QWidget, ui.Ui_WMSDockWidget):
                         username, password = dlg.getAuthInfo()
                         # If user & pw have been entered, cache them.
                         constants.WMS_LOGIN_CACHE[base_url] = (username, password)
-                        self.capabilities_worker.function = lambda: MSSWebMapService(base_url, version=version,
-                                                                                     username=username, password=password)
+                        self.capabilities_worker.function = lambda: MSSWebMapService(
+                            base_url, version=version,
+                            username=username, password=password)
                         self.capabilities_worker.start()
                     else:
                         self.cpdlg.close()
                         return
                 else:
-                    self.cpdlg.close()
                     logging.error("cannot load capabilities document.. "
                                   "no layers can be used in this view.")
                     QtWidgets.QMessageBox.critical(
                         self.multilayers, self.tr("Web Map Service"),
                         self.tr(f"ERROR: We cannot load the capability document!\n\n{type(ex)}\n{ex}"))
+                    self.cpdlg.close()
+            except Exception as ex:
+                logging.error("cannot load capabilities document.. "
+                              "no layers can be used in this view.")
+                QtWidgets.QMessageBox.critical(
+                    self.multilayers, self.tr("Web Map Service"),
+                    self.tr(f"ERROR: We cannot load the capability document!\n\n{type(ex)}\n{ex}"))
+                self.cpdlg.close()
 
         try:
             str(base_url)
         except UnicodeEncodeError:
-            self.cpdlg.close()
             logging.error("got a unicode url?!: '%s'", base_url)
             QtWidgets.QMessageBox.critical(self.multilayers, self.tr("Web Map Service"),
                                            self.tr("ERROR: We cannot parse unicode URLs!"))
+            self.cpdlg.close()
 
         self.capabilities_worker = Worker.create(lambda: MSSWebMapService(base_url, version=version,
                                                                           username=username, password=password),
@@ -635,7 +643,7 @@ class WMSControlWidget(QtWidgets.QWidget, ui.Ui_WMSDockWidget):
     def wms_url_changed(self, text):
         wms = WMS_SERVICE_CACHE.get(text)
         if wms is not None:
-            self.activate_wms(wms)
+            self.activate_wms(wms, cache=True)
 
     @QtCore.pyqtSlot(Exception)
     def display_exception(self, ex):
@@ -696,7 +704,6 @@ class WMSControlWidget(QtWidgets.QWidget, ui.Ui_WMSDockWidget):
 
         def on_failure(e):
             try:
-                self.cpdlg.close()
                 raise e
             except (requests.exceptions.TooManyRedirects,
                     requests.exceptions.ConnectionError,
@@ -708,25 +715,14 @@ class WMSControlWidget(QtWidgets.QWidget, ui.Ui_WMSDockWidget):
                 QtWidgets.QMessageBox.critical(
                     self.multilayers, self.tr("Web Map Service"),
                     self.tr(f"ERROR: We cannot load the capability document!\n\\n{type(ex)}\n{ex}"))
+            finally:
+                self.cpdlg.close()
 
         self.display_capabilities_dialog()
         self.capabilities_worker = Worker.create(lambda: requests.get(base_url, params=params),
                                                  on_success, on_failure)
 
-    def activate_wms(self, wms):
-        # Clear layer and style combo boxes. First disconnect the layerChanged
-        # slot to avoid calls to this function.
-        self.btGetMap.setEnabled(False)
-        self.cbLevel.clear()
-        self.cbInitTime.clear()
-        self.cbValidTime.clear()
-
-        self.enable_level_elements(False)
-        self.enable_valid_time_elements(False)
-        self.enable_init_time_elements(False)
-        self.multilayers.pbViewCapabilities.setEnabled(False)
-        self.cbTransparent.setChecked(False)
-
+    def activate_wms(self, wms, cache=False):
         # Parse layer tree of the wms object and discover usable layers.
         stack = list(wms.contents.values())
         filtered_layers = set()
@@ -740,6 +736,11 @@ class WMSControlWidget(QtWidgets.QWidget, ui.Ui_WMSDockWidget):
         logging.debug("discovered %i layers that can be used in this view",
                       len(filtered_layers))
         filtered_layers = sorted(filtered_layers)
+        if not cache and wms.url in self.multilayers.layers and \
+                wms.capabilities_document.decode("utf-8") != \
+                self.multilayers.layers[wms.url]["wms"].capabilities_document.decode("utf-8"):
+            self.multilayers.delete_server(self.multilayers.layers[wms.url]["header"])
+        self.multilayers.add_wms(wms)
         for layer in filtered_layers:
             self.multilayers.add_multilayer(layer, wms)
         self.multilayers.filter_multilayers()
@@ -763,9 +764,6 @@ class WMSControlWidget(QtWidgets.QWidget, ui.Ui_WMSDockWidget):
         self.fetcher.finished.connect(self.continue_retrieve_image)  # implicitely uses a queued connection
         self.fetcher.exception.connect(self.display_exception)  # implicitely uses a queued connection
         self.fetcher.started_request.connect(self.display_progress_dialog)  # implicitely uses a queued connection
-
-        if len(filtered_layers) > 0:
-            self.btGetMap.setEnabled(True)
 
         # logic to disable fill continents, fill oceans on connection to
         self.signal_disable_cbs.emit()
@@ -1064,7 +1062,7 @@ class WMSControlWidget(QtWidgets.QWidget, ui.Ui_WMSDockWidget):
             if init_time is not None:
                 self.dteInitTime.setDateTime(init_time)
 
-        if self.multilayers.threads == 0:
+        if self.multilayers.threads == 0 and not self.layerChangeInProgress:
             self.multilayers.get_current_layer().set_itime(self.cbInitTime.currentText())
 
         self.auto_update()
@@ -1079,14 +1077,14 @@ class WMSControlWidget(QtWidgets.QWidget, ui.Ui_WMSDockWidget):
             if valid_time is not None:
                 self.dteValidTime.setDateTime(valid_time)
 
-        if self.multilayers.threads == 0:
+        if self.multilayers.threads == 0 and not self.layerChangeInProgress:
             self.multilayers.get_current_layer().set_vtime(self.cbValidTime.currentText())
 
         self.auto_update()
         return valid_time == "" or valid_time is not None
 
     def level_changed(self):
-        if self.multilayers.threads == 0:
+        if self.multilayers.threads == 0 and not self.layerChangeInProgress:
             self.multilayers.get_current_layer().set_level(self.cbLevel.currentText())
         self.auto_update()
 
@@ -1342,6 +1340,7 @@ class WMSControlWidget(QtWidgets.QWidget, ui.Ui_WMSDockWidget):
         self.display_retrieved_image(img, legend_img, layer, style, init_time, valid_time, complete_level)
         # this is for cases where 'remove' button is clicked, then 'retrieve' is clicked
         self.signal_disable_cbs.emit()
+        self.image_displayed.emit()
 
     def get_map(self, layers=None):
         """Prototypical stub for getMap() function. Needs to be reimplemented

@@ -43,17 +43,22 @@ class Multilayers(QtWidgets.QDialog, ui.Ui_MultilayersDialog):
         super().__init__(parent=dock_widget)
         self.setupUi(self)
         self.setWindowFlags(QtCore.Qt.Window)
+        if isinstance(dock_widget, mslib.msui.wms_control.HSecWMSControlWidget):
+            self.setWindowTitle(self.windowTitle() + " (Top View)")
+        elif isinstance(dock_widget, mslib.msui.wms_control.VSecWMSControlWidget):
+            self.setWindowTitle(self.windowTitle() + " (Side View)")
         self.dock_widget = dock_widget
         self.layers = {}
         self.layers_priority = []
         self.current_layer: Layer = None
         self.threads = 0
         self.filter_favourite = False
-        self.settings = load_settings_qsettings("multilayers", {"favourites": []})
+        self.settings = load_settings_qsettings("multilayers", {"favourites": [], "saved_styles": {}})
         self.synced_reference = Layer(None, None, None, is_empty=True)
         self.listLayers.itemChanged.connect(self.multilayer_changed)
         self.listLayers.itemClicked.connect(self.multilayer_clicked)
-        self.listLayers.itemClicked.connect(self.check_favourite_clicked)
+        self.listLayers.itemClicked.connect(self.check_icon_clicked)
+        self.listLayers.itemDoubleClicked.connect(self.multilayer_doubleclicked)
         self.listLayers.setVisible(True)
 
         self.leMultiFilter.setVisible(True)
@@ -75,6 +80,28 @@ class Multilayers(QtWidgets.QDialog, ui.Ui_MultilayersDialog):
         self.listLayers.setColumnHidden(2, True)
         self.listLayers.header().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
 
+        self.delete_shortcut = QtWidgets.QShortcut(QtGui.QKeySequence("Delete"), self)
+        self.delete_shortcut.activated.connect(self.delete_server)
+
+    def delete_server(self, server=None):
+        if not server:
+            server = self.listLayers.currentItem()
+
+        if server and not isinstance(server, Layer):
+            current = self.get_current_layer()
+            if current in self.layers[server.text(0)].values():
+                self.current_layer = None
+            for child_index in range(server.childCount()):
+                widget = server.child(child_index)
+                if widget in self.layers_priority:
+                    self.layers_priority.remove(widget)
+
+            index = self.listLayers.indexOfTopLevelItem(server)
+            self.layers.pop(server.text(0))
+            self.listLayers.takeTopLevelItem(index)
+            self.update_priority_selection()
+            self.needs_repopulate.emit()
+
     def remove_filter_triggered(self):
         self.leMultiFilter.setText("")
         if self.filter_favourite:
@@ -90,30 +117,39 @@ class Multilayers(QtWidgets.QDialog, ui.Ui_MultilayersDialog):
             self.filterFavouriteAction.setToolTip("Show only favourite layers")
         self.filter_multilayers()
 
-    def check_favourite_clicked(self, layer):
+    def check_icon_clicked(self, item):
         """
-        Checks if the mouse is pointing at the favourite icon and handles the event accordingly
+        Checks if the mouse is pointing at an icon and handles the event accordingly
         """
-        if layer.childCount() == 0:
+        # Clicked on layer, check favourite
+        if isinstance(item, Layer):
             position = self.listLayers.viewport().mapFromGlobal(QtGui.QCursor().pos())
             if (self.cbMultilayering.isChecked() and 64 <= position.x() <= 80) or \
                (not self.cbMultilayering.isChecked() and 44 <= position.x() <= 60):
                 self.threads += 1
-                layer.favourite_triggered()
+                item.favourite_triggered()
                 if self.filter_favourite:
                     self.filter_multilayers()
+                self.threads -= 1
+
+        # Clicked on server, check garbage bin
+        elif isinstance(item, QtWidgets.QTreeWidgetItem):
+            position = self.listLayers.viewport().mapFromGlobal(QtGui.QCursor().pos())
+            if 26 <= position.x() <= 38:
+                self.threads += 1
+                self.delete_server(item)
                 self.threads -= 1
 
     def get_current_layer(self):
         """
         Return the current layer in the perspective of Multilayering or Singlelayering
-        For Multilayering, it is the last of the activated layers
+        For Multilayering, it is the first priority syncable layer, or first priority layer if none are syncable
         For Singlelayering, it is the current selected layer
         """
         if self.cbMultilayering.isChecked():
             active_layers = self.get_active_layers()
             synced_layers = [layer for layer in active_layers if layer.is_synced]
-            return synced_layers[-1] if synced_layers else active_layers[-1] if active_layers else None
+            return synced_layers[0] if synced_layers else active_layers[0] if active_layers else None
         else:
             return self.current_layer
 
@@ -155,7 +191,7 @@ class Multilayers(QtWidgets.QDialog, ui.Ui_MultilayersDialog):
                     wms_hits += 1
                 else:
                     widget.setHidden(True)
-            if wms_hits == 0:
+            if wms_hits == 0 and len(filter_string) > 0:
                 header.setHidden(True)
             else:
                 header.setHidden(False)
@@ -234,9 +270,9 @@ class Multilayers(QtWidgets.QDialog, ui.Ui_MultilayersDialog):
                 priority.setCurrentIndex(self.layers_priority.index(layer))
                 priority.currentIndexChanged.connect(self.priority_changed)
 
-    def add_multilayer(self, name, wms):
+    def add_wms(self, wms):
         """
-        Adds a layer to the multilayer list, with the wms url as a parent
+        Adds a wms to the multilayer list
         """
         if wms.url not in self.layers:
             header = QtWidgets.QTreeWidgetItem(self.listLayers)
@@ -246,7 +282,16 @@ class Multilayers(QtWidgets.QDialog, ui.Ui_MultilayersDialog):
             self.layers[wms.url]["header"] = header
             self.layers[wms.url]["wms"] = wms
             header.setExpanded(True)
+            size = QtCore.QSize()
+            size.setHeight(15)
+            header.setSizeHint(0, size)
+            icon = QtGui.QIcon(icons("64x64", "bin.png"))
+            header.setIcon(0, icon)
 
+    def add_multilayer(self, name, wms):
+        """
+        Adds a layer to the multilayer list, with the wms url as a parent
+        """
         if name not in self.layers[wms.url]:
             layerobj = self.dock_widget.get_layer_object(wms, name.split(" | ")[-1])
             widget = Layer(self.layers[wms.url]["header"], self, layerobj, name=name)
@@ -266,6 +311,7 @@ class Multilayers(QtWidgets.QDialog, ui.Ui_MultilayersDialog):
                 def style_changed(layer):
                     self.multilayer_clicked(layer)
                     layer.style = self.listLayers.itemWidget(layer, 1).currentText()
+                    layer.style_changed()
                     self.dock_widget.auto_update()
 
                 style.currentIndexChanged.connect(lambda: style_changed(widget))
@@ -280,25 +326,36 @@ class Multilayers(QtWidgets.QDialog, ui.Ui_MultilayersDialog):
         Gets called whenever the user clicks on a layer in the multilayer list
         Makes sure the dock widget updates its data depending on the users selection
         """
-        if item.childCount() > 0:
+        if not isinstance(item, Layer):
+            index = self.cbWMS_URL.findText(item.text(0))
+            if index != -1 and index != self.cbWMS_URL.currentIndex():
+                self.cbWMS_URL.setCurrentIndex(index)
             return
 
         self.threads += 1
 
-        if self.current_layer.get_level() in item.get_levels():
-            item.set_level(self.current_layer.get_level())
-        if self.current_layer.get_itime() in item.get_itimes():
-            item.set_itime(self.current_layer.get_itime())
-        if self.current_layer.get_vtime() in item.get_vtimes():
-            item.set_vtime(self.current_layer.get_vtime())
+        if self.current_layer:
+            if self.current_layer.get_level() in item.get_levels():
+                item.set_level(self.current_layer.get_level())
+            if self.current_layer.get_itime() in item.get_itimes():
+                item.set_itime(self.current_layer.get_itime())
+            if self.current_layer.get_vtime() in item.get_vtimes():
+                item.set_vtime(self.current_layer.get_vtime())
 
-        self.current_layer = item
-        self.listLayers.setCurrentItem(item)
-        index = self.cbWMS_URL.findText(item.get_wms().url)
-        if index != -1 and index != self.cbWMS_URL.currentIndex():
-            self.cbWMS_URL.setCurrentIndex(index)
-        self.needs_repopulate.emit()
+        if self.current_layer != item:
+            self.current_layer = item
+            self.listLayers.setCurrentItem(item)
+            index = self.cbWMS_URL.findText(item.get_wms().url)
+            if index != -1 and index != self.cbWMS_URL.currentIndex():
+                self.cbWMS_URL.setCurrentIndex(index)
+            self.needs_repopulate.emit()
+            if not self.cbMultilayering.isChecked():
+                QtCore.QTimer.singleShot(QtWidgets.QApplication.doubleClickInterval(), self.dock_widget.auto_update)
         self.threads -= 1
+
+    def multilayer_doubleclicked(self, item, column):
+        if isinstance(item, Layer):
+            self.hide()
 
     def multilayer_changed(self, item):
         """
@@ -321,6 +378,8 @@ class Multilayers(QtWidgets.QDialog, ui.Ui_MultilayersDialog):
             elif not (item.itimes or item.vtimes or item.levels):
                 item.is_active_unsynced = True
             self.update_checkboxes()
+            self.needs_repopulate.emit()
+            self.dock_widget.auto_update()
         elif item.checkState(0) == 0 and self.listLayers.itemWidget(item, 2):
             if item in self.layers_priority:
                 self.listLayers.removeItemWidget(item, 2)
@@ -330,6 +389,8 @@ class Multilayers(QtWidgets.QDialog, ui.Ui_MultilayersDialog):
             item.is_active_unsynced = False
             self.reload_sync()
             self.update_checkboxes()
+            self.needs_repopulate.emit()
+            self.dock_widget.auto_update()
 
     def priority_changed(self, new_index):
         """
@@ -348,6 +409,8 @@ class Multilayers(QtWidgets.QDialog, ui.Ui_MultilayersDialog):
         self.layers_priority.insert(new_index, to_move)
         self.update_priority_selection()
         self.multilayer_clicked(self.layers_priority[new_index])
+        self.needs_repopulate.emit()
+        self.dock_widget.auto_update()
 
     def update_checkboxes(self):
         """
@@ -511,11 +574,15 @@ class Layer(QtWidgets.QTreeWidgetItem):
 
     def _parse_styles(self):
         """
-        Extracts and saves all styles for the layer
+        Extracts and saves all styles for the layer.
+        Sets the layers style to the first one, or the saved one if possible.
         """
         self.styles = [f"{style} | {self.layerobj.styles[style]['title']}" for style in self.layerobj.styles]
         if len(self.styles) > 0:
             self.style = self.styles[0]
+            if str(self) in self.parent.settings["saved_styles"] and \
+               self.parent.settings["saved_styles"][str(self)] in self.styles:
+                self.style = self.parent.settings["saved_styles"][str(self)]
 
     def get_level(self):
         if not self.parent.cbMultilayering.isChecked() or not self.is_synced:
@@ -626,6 +693,16 @@ class Layer(QtWidgets.QTreeWidgetItem):
         else:
             icon = QtGui.QIcon(icons("64x64", "star_unfilled.png"))
         self.setIcon(0, icon)
+
+    def style_changed(self):
+        """
+        Persistently saves the currently selected style of the layer, if it is not the first one
+        """
+        if self.style != self.styles[0]:
+            self.parent.settings["saved_styles"][str(self)] = self.style
+        else:
+            self.parent.settings["saved_styles"].pop(str(self))
+        save_settings_qsettings("multilayers", self.parent.settings)
 
     def favourite_triggered(self):
         """

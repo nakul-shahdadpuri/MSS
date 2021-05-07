@@ -183,7 +183,8 @@ class WMSServer(object):
             self.register_vsec_layer(datasets, layer)
 
     def register_hsec_layer(self, datasets, layer_class):
-        """Register horizontal section layer in internal dict of layers.
+        """
+        Register horizontal section layer in internal dict of layers.
 
         Arguments:
         datasets -- list of strings describing the datasets with which the
@@ -210,7 +211,8 @@ class WMSServer(object):
             self.hsec_layer_registry[dataset][layer.name] = layer
 
     def register_vsec_layer(self, datasets, layer_class):
-        """Register vertical section layer in internal dict of layers.
+        """
+        Register vertical section layer in internal dict of layers.
 
         See register_hsec_layer() for further information.
         """
@@ -234,7 +236,8 @@ class WMSServer(object):
             self.vsec_layer_registry[dataset][layer.name] = layer
 
     def create_service_exception(self, code=None, text="", version="1.3.0"):
-        """Create a service exception XML from the XML template defined above.
+        """
+        Create a service exception XML from the XML template defined above.
 
         Arguments:
         code -- WMS 1.1.1 exception code, see p.51 of the WMS 1.1.1 standard.
@@ -325,9 +328,6 @@ class WMSServer(object):
         Handler for a GetMap and GetVSec requests. Produces a plot with
         the parameters specified in the URL.
 
-        # TODO: Handle multiple layers. (mr, 2010-06-09)
-        # TODO: Cache the produced images: Check whether an image with the given
-        #      parameters has already been produced. (mr, 2010-08-18)
         """
         logging.debug("GetMap/GetVSec request. Interpreting parameters..")
 
@@ -544,7 +544,8 @@ class WMSServer(object):
                     logging.error("ERROR: %s %s", type(ex), ex)
                     msg = "The data corresponding to your request is not available. Please check the " \
                           "times and/or path you have specified.\n\n" \
-                          f"Error message: {ex}"
+                          f"Error message: {ex}.\n" \
+                          "Hint: Check used waypoints."
                     return self.create_service_exception(text=msg, version=version)
 
         # 4) Return the produced image.
@@ -591,6 +592,17 @@ def application():
         return res
 
     except Exception as ex:
+        # without query parameter show index page
+        query = request.args
+        if len(query) == 0:
+            return render_template("/index.html")
+
+        # communicate request errors back to client user
         logging.error("Unexpected error: %s: %s\nTraceback:\n%s",
                       type(ex), ex, traceback.format_exc())
-        return render_template("/index.html")
+        error_message = "{}: {}\n".format(type(ex), ex)
+        response_headers = [('Content-type', 'text/plain'), ('Content-Length', str(len(error_message)))]
+        res = make_response(error_message, 404)
+        for response_header in response_headers:
+            res.headers[response_header[0]] = response_header[1]
+        return res
